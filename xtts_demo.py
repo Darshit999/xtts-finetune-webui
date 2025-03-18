@@ -180,11 +180,7 @@ if __name__ == "__main__":
                 label="Output path (where data and checkpoints will be saved):",
                 value=args.out_path,
             )
-            # upload_file = gr.Audio(
-            #     sources="upload",
-            #     label="Select here the audio files that you want to use for XTTS trainining !",
-            #     type="filepath",
-            # )
+            
             upload_file = gr.File(
                 file_count="multiple",
                 label="Select here the audio files that you want to use for XTTS trainining (Supported formats: wav, mp3, and flac)",
