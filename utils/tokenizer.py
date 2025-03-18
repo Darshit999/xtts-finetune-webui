@@ -3,10 +3,7 @@ import re
 import textwrap
 from functools import cached_property
 
-import pypinyin
 import torch
-from hangul_romanize import Transliter
-from hangul_romanize.rule import academic
 from num2words import num2words
 from spacy.lang.ar import Arabic
 from spacy.lang.en import English
@@ -17,7 +14,7 @@ from spacy.lang.zh import Chinese
 from tokenizers import Tokenizer
 
 from TTS.tts.layers.xtts.zh_num2words import TextNorm as zh_num2words
-
+from TTS.tts.utils.text.cleaners import collapse_whitespace, lowercase
 
 def get_spacy_lang(lang):
     if lang == "zh":
@@ -262,7 +259,7 @@ def expand_abbreviations_multilingual(text, lang="en"):
 
 _symbols_multilingual = {
     "en": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " and "),
             ("@", " at "),
@@ -274,7 +271,7 @@ _symbols_multilingual = {
         ]
     ],
     "es": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " y "),
             ("@", " arroba "),
@@ -286,7 +283,7 @@ _symbols_multilingual = {
         ]
     ],
     "fr": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " et "),
             ("@", " arobase "),
@@ -298,7 +295,7 @@ _symbols_multilingual = {
         ]
     ],
     "de": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " und "),
             ("@", " at "),
@@ -310,7 +307,7 @@ _symbols_multilingual = {
         ]
     ],
     "pt": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " e "),
             ("@", " arroba "),
@@ -322,7 +319,7 @@ _symbols_multilingual = {
         ]
     ],
     "it": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " e "),
             ("@", " chiocciola "),
@@ -334,7 +331,7 @@ _symbols_multilingual = {
         ]
     ],
     "pl": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " i "),
             ("@", " małpa "),
@@ -347,7 +344,7 @@ _symbols_multilingual = {
     ],
     "ar": [
         # Arabic
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " و "),
             ("@", " على "),
@@ -360,7 +357,7 @@ _symbols_multilingual = {
     ],
     "zh": [
         # Chinese
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " 和 "),
             ("@", " 在 "),
@@ -373,7 +370,7 @@ _symbols_multilingual = {
     ],
     "cs": [
         # Czech
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " a "),
             ("@", " na "),
@@ -386,7 +383,7 @@ _symbols_multilingual = {
     ],
     "ru": [
         # Russian
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " и "),
             ("@", " собака "),
@@ -399,7 +396,7 @@ _symbols_multilingual = {
     ],
     "nl": [
         # Dutch
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " en "),
             ("@", " bij "),
@@ -411,7 +408,7 @@ _symbols_multilingual = {
         ]
     ],
     "tr": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " ve "),
             ("@", " at "),
@@ -423,7 +420,7 @@ _symbols_multilingual = {
         ]
     ],
     "hu": [
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " és "),
             ("@", " kukac "),
@@ -436,7 +433,7 @@ _symbols_multilingual = {
     ],
     "ko": [
         # Korean
-        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
+        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
         for x in [
             ("&", " 그리고 "),
             ("@", " 에 "),
@@ -589,14 +586,6 @@ def expand_numbers_multilingual(text, lang="en"):
     return text
 
 
-def lowercase(text):
-    return text.lower()
-
-
-def collapse_whitespace(text):
-    return re.sub(_whitespace_re, " ", text)
-
-
 def multilingual_cleaners(text, lang):
     text = text.replace('"', "")
     if lang == "tr":
@@ -619,6 +608,10 @@ def basic_cleaners(text):
 
 
 def chinese_transliterate(text):
+    try:
+        import pypinyin
+    except ImportError as e:
+        raise ImportError("Chinese requires: pypinyin") from e
     return "".join(
         [p[0] for p in pypinyin.pinyin(text, style=pypinyin.Style.TONE3, heteronym=False, neutral_tone_with_five=True)]
     )
@@ -631,6 +624,11 @@ def japanese_cleaners(text, katsu):
 
 
 def korean_transliterate(text):
+   try:
+        from hangul_romanize import Transliter
+        from hangul_romanize.rule import academic
+    except ImportError as e:
+        raise ImportError("Korean requires: hangul_romanize") from e
     r = Transliter(academic)
     return r.translit(text)
 

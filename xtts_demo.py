@@ -246,7 +246,7 @@ if __name__ == "__main__":
                         error = traceback.format_exc()
                         return f"The data processing was interrupted due an error !! Please check the console to verify the full error message! \n Error summary: {error}", "", ""
 
-                # clear_gpu_cache()
+                clear_gpu_cache()
 
                 # if audio total len is less than 2 minutes raise an error
                 if audio_total_size < 120:
