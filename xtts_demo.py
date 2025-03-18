@@ -4,6 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import os
 import shutil
 import glob
 
@@ -14,28 +15,14 @@ import numpy as np
 import torch
 import torchaudio
 import traceback
-from utils.formatter import format_audio_list,find_latest_best_model, list_audios
+from utils.formatter import format_audio_list,find_latest_best_model
 from utils.gpt_train import train_gpt
-
-from faster_whisper import WhisperModel
 
 from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import Xtts
 
-import requests
-
-def download_file(url, destination):
-    try:
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        with open(destination, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-        print(f"Downloaded file to {destination}")
-        return destination
-    except Exception as e:
-        print(f"Failed to download the file: {e}")
-        return None
+from TTS.tts.configs.xtts_config import XttsConfig
+from TTS.tts.models.xtts import Xtts
 
 # Clear logs
 def remove_log_file(file_path):
@@ -52,24 +39,6 @@ def clear_gpu_cache():
         torch.cuda.empty_cache()
 
 XTTS_MODEL = None
-
-def create_zip(folder_path, zip_name):
-    zip_path = os.path.join(tempfile.gettempdir(), f"{zip_name}.zip")
-    shutil.make_archive(zip_path.replace('.zip', ''), 'zip', folder_path)
-    return zip_path
-
-def get_model_zip(out_path):
-    ready_folder = os.path.join(out_path, "ready")
-    if os.path.exists(ready_folder):
-        return create_zip(ready_folder, "optimized_model")
-    return None
-
-def get_dataset_zip(out_path):
-    dataset_folder = os.path.join(out_path, "dataset")
-    if os.path.exists(dataset_folder):
-        return create_zip(dataset_folder, "dataset")
-    return None
-
 def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
     global XTTS_MODEL
     clear_gpu_cache()
@@ -89,6 +58,8 @@ def load_model(xtts_checkpoint, xtts_config, xtts_vocab,xtts_speaker):
 def run_tts(lang, tts_text, speaker_audio_file, temperature, length_penalty,repetition_penalty,top_k,top_p,sentence_split,use_config):
     if XTTS_MODEL is None or not speaker_audio_file:
         return "You need to run the previous step to load the model !!", None, None
+
+
 
     gpt_cond_latent, speaker_embedding = XTTS_MODEL.get_conditioning_latents(audio_path=speaker_audio_file, gpt_cond_len=XTTS_MODEL.config.gpt_cond_len, max_ref_length=XTTS_MODEL.config.max_ref_len, sound_norm_refs=XTTS_MODEL.config.sound_norm_refs)
     
@@ -164,24 +135,6 @@ if __name__ == "__main__":
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument(
-        "--whisper_model",
-        type=str,
-        help="Name of the whisper model selected by default (Optional) Choices are: ['large-v3','large-v2', 'large', 'medium', 'small']   Default Value: 'large-v3'",
-        default="large-v3",
-    )
-    parser.add_argument(
-        "--audio_folder_path",
-        type=str,
-        help="Path to the folder with audio files (optional)",
-        default="",
-    )
-    parser.add_argument(
-        "--share",
-        action="store_true",
-        default=False,
-        help="Enable sharing of the Gradio interface via public link.",
-    )
-    parser.add_argument(
         "--port",
         type=int,
         help="Port to run the gradio demo. Default: 5003",
@@ -221,7 +174,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    with gr.Blocks(title=os.environ.get("APP_NAME", "Gradio")) as demo:
+    with gr.Blocks() as demo:
         with gr.Tab("1 - Data processing"):
             out_path = gr.Textbox(
                 label="Output path (where data and checkpoints will be saved):",
@@ -236,15 +189,10 @@ if __name__ == "__main__":
                 file_count="multiple",
                 label="Select here the audio files that you want to use for XTTS trainining (Supported formats: wav, mp3, and flac)",
             )
-            
-            audio_folder_path = gr.Textbox(
-                label="Path to the folder with audio files (optional):",
-                value=args.audio_folder_path,
-            )
 
             whisper_model = gr.Dropdown(
                 label="Whisper Model",
-                value=args.whisper_model,
+                value="large-v3",
                 choices=[
                     "large-v3",
                     "large-v2",
@@ -284,51 +232,34 @@ if __name__ == "__main__":
 
             prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
         
-            def preprocess_dataset(audio_path, audio_folder_path, language, whisper_model, out_path, train_csv, eval_csv, progress=gr.Progress(track_tqdm=True)):
+            def preprocess_dataset(audio_path, language, whisper_model, out_path,train_csv,eval_csv, progress=gr.Progress(track_tqdm=True)):
                 clear_gpu_cache()
-            
+
                 train_csv = ""
                 eval_csv = ""
-            
+
                 out_path = os.path.join(out_path, "dataset")
                 os.makedirs(out_path, exist_ok=True)
-            
-                if audio_folder_path:
-                    audio_files = list(list_audios(audio_folder_path))
-                else:
-                    audio_files = audio_path
-            
-                if not audio_files:
-                    return "No audio files found! Please provide files via Gradio or specify a folder path.", "", ""
+                if audio_path is None:
+                    return "You should provide one or multiple audio files! If you provided it, probably the upload of the files is not finished yet!", "", ""
                 else:
                     try:
-                        # Loading Whisper
-                        device = "cuda" if torch.cuda.is_available() else "cpu" 
-                        
-                        # Detect compute type 
-                        if torch.cuda.is_available():
-                            compute_type = "float16"
-                        else:
-                            compute_type = "float32"
-                        
-                        asr_model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
-                        train_meta, eval_meta, audio_total_size = format_audio_list(audio_files, asr_model=asr_model, target_language=language, out_path=out_path, gradio_progress=progress)
+                        train_meta, eval_meta, audio_total_size = format_audio_list(audio_path, whisper_model = whisper_model, target_language=language, out_path=out_path, gradio_progress=progress)
                     except:
                         traceback.print_exc()
                         error = traceback.format_exc()
                         return f"The data processing was interrupted due an error !! Please check the console to verify the full error message! \n Error summary: {error}", "", ""
-            
+
                 # clear_gpu_cache()
-            
+
                 # if audio total len is less than 2 minutes raise an error
                 if audio_total_size < 120:
                     message = "The sum of the duration of the audios that you provided should be at least 2 minutes!"
                     print(message)
                     return message, "", ""
-            
+
                 print("Dataset Processed!")
                 return "Dataset Processed!", train_meta, eval_meta
-
 
         with gr.Tab("2 - Fine-tuning XTTS Encoder"):
             load_params_btn = gr.Button(value="Load Params from output folder")
@@ -383,7 +314,7 @@ if __name__ == "__main__":
             )
             clear_train_data = gr.Dropdown(
                 label="Clear train data, you will delete selected folder, after optimizing",
-                value="none",
+                value="run",
                 choices=[
                     "none",
                     "run",
@@ -399,30 +330,18 @@ if __name__ == "__main__":
             train_btn = gr.Button(value="Step 2 - Run the training")
             optimize_model_btn = gr.Button(value="Step 2.5 - Optimize the model")
             
-            import os
-            import shutil
-            from pathlib import Path
-            import traceback
-            
-            def train_model(custom_model, version, language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length):
+            def train_model(custom_model,version,language, train_csv, eval_csv, num_epochs, batch_size, grad_acumm, output_path, max_audio_length):
                 clear_gpu_cache()
-          
-                # Check if `custom_model` is a URL and download it if true.
-                if custom_model.startswith("http"):
-                    print("Downloading custom model from URL...")
-                    custom_model = download_file(custom_model, "custom_model.pth")
-                    if not custom_model:
-                        return "Failed to download the custom model.", "", "", "", ""
-            
+
                 run_dir = Path(output_path) / "run"
-            
-                # Remove train dir
+
+                # # Remove train dir
                 if run_dir.exists():
-                    shutil.rmtree(run_dir)
+                    os.remove(run_dir)
                 
                 # Check if the dataset language matches the language you specified 
                 lang_file_path = Path(output_path) / "dataset" / "lang.txt"
-            
+
                 # Check if lang.txt already exists and contains a different language
                 current_language = None
                 if lang_file_path.exists():
@@ -437,27 +356,34 @@ if __name__ == "__main__":
                 try:
                     # convert seconds to waveform frames
                     max_audio_length = int(max_audio_length * 22050)
-                    speaker_xtts_path, config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length)
+                    speaker_xtts_path,config_path, original_xtts_checkpoint, vocab_file, exp_path, speaker_wav = train_gpt(custom_model,version,language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path=output_path, max_audio_length=max_audio_length)
                 except:
                     traceback.print_exc()
                     error = traceback.format_exc()
-                    return f"The training was interrupted due to an error !! Please check the console to check the full error message! \n Error summary: {error}", "", "", "", ""
-            
+                    return f"The training was interrupted due an error !! Please check the console to check the full error message! \n Error summary: {error}", "", "", "", ""
+
+                # copy original files to avoid parameters changes issues
+                # os.system(f"cp {config_path} {exp_path}")
+                # os.system(f"cp {vocab_file} {exp_path}")
+                
                 ready_dir = Path(output_path) / "ready"
-            
+
                 ft_xtts_checkpoint = os.path.join(exp_path, "best_model.pth")
-            
+
                 shutil.copy(ft_xtts_checkpoint, ready_dir / "unoptimize_model.pth")
-            
+                # os.remove(ft_xtts_checkpoint)
+
                 ft_xtts_checkpoint = os.path.join(ready_dir, "unoptimize_model.pth")
-            
+
+                # Reference
                 # Move reference audio to output folder and rename it
                 speaker_reference_path = Path(speaker_wav)
                 speaker_reference_new_path = ready_dir / "reference.wav"
                 shutil.copy(speaker_reference_path, speaker_reference_new_path)
-            
+
                 print("Model training done!")
-                return "Model training done!", config_path, vocab_file, ft_xtts_checkpoint, speaker_xtts_path, speaker_reference_new_path
+                # clear_gpu_cache()
+                return "Model training done!", config_path, vocab_file, ft_xtts_checkpoint,speaker_xtts_path, speaker_reference_new_path
 
             def optimize_model(out_path, clear_train_data):
                 # print(out_path)
@@ -635,14 +561,6 @@ if __name__ == "__main__":
                             value=False,
                         )
                     tts_btn = gr.Button(value="Step 4 - Inference")
-                    
-                    model_download_btn = gr.Button("Step 5 - Download Optimized Model ZIP")
-                    dataset_download_btn = gr.Button("Step 5 - Download Dataset ZIP")
-                
-                    model_zip_file = gr.File(label="Download Optimized Model", interactive=False)
-                    dataset_zip_file = gr.File(label="Download Dataset", interactive=False)
-
-
 
                 with gr.Column() as col3:
                     progress_gen = gr.Label(
@@ -655,7 +573,6 @@ if __name__ == "__main__":
                 fn=preprocess_dataset,
                 inputs=[
                     upload_file,
-                    audio_folder_path,
                     lang,
                     whisper_model,
                     out_path,
@@ -668,7 +585,6 @@ if __name__ == "__main__":
                     eval_csv,
                 ],
             )
-
 
             load_params_btn.click(
                 fn=load_params,
@@ -744,23 +660,10 @@ if __name__ == "__main__":
                     ],
                 outputs=[progress_load,xtts_checkpoint,xtts_config,xtts_vocab,xtts_speaker,speaker_reference_audio],
             )
-             
-            model_download_btn.click(
-                fn=get_model_zip,
-                inputs=[out_path],
-                outputs=[model_zip_file]
-            )
-            
-            dataset_download_btn.click(
-                fn=get_dataset_zip,
-                inputs=[out_path],
-                outputs=[dataset_zip_file]
-            )
 
     demo.launch(
-        share=args.share,
+        share=True,
         debug=False,
         server_port=args.port,
-        # inweb=True,
-        # server_name="localhost"
+        server_name="localhost"
     )

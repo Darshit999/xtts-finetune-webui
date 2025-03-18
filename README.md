@@ -51,16 +51,6 @@ If you are looking for an option for normal XTTS use look here [https://github.c
 
 ![image](https://github.com/daswer123/xtts-finetune-webui/assets/22278673/aa05bcd4-8642-4de4-8f2f-bc0f5571af63)
 
-## Google colab
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DrewThomasson/xtts-finetune-webui/blob/main/notebook/xtts_finetune_webui.ipynb)
-
-## 🐳 Run in Docker 
-```docker
-docker run -it --gpus all --pull always -p 7860:7860 --platform=linux/amd64 athomasson2/fine_tune_xtts:huggingface python app.py
-```
-
-
-
 ## Install
 
 1. Make sure you have `Cuda` installed
@@ -74,15 +64,3 @@ docker run -it --gpus all --pull always -p 7860:7860 --platform=linux/amd64 atho
 1. First start `install.bat`
 2. To start the server start `start.bat`
 3. Go to the local address `127.0.0.1:5003`
-
-### On Linux
-
-1. Run `bash install.sh`
-2. To start the server start `start.sh`
-3. Go to the local address `127.0.0.1:5003`
-
-### On Apple Silicon Mac (python 3.10 env)
-1. Run `pip install --no-deps -r apple_silicon_requirements.txt`
-2. To start the server `python xtts_demo.py`
-3. Go to the local address `127.0.0.1:5003`
-~                                            
