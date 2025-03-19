@@ -72,9 +72,9 @@ def format_audio_list(
         # Only update lang.txt if target language is different from current language
         with open(lang_file_path, 'w', encoding='utf-8') as lang_file:
             lang_file.write(target_language + '\n')
-        print("Warning, existing language does not match target language. Updated lang.txt with target language.")
+        print(f"Warning, existing language({current_language}) does not match target language({target_language}). Updated lang.txt with target language.")
     else:
-        print("Existing language matches target language")
+        print(f"Existing language({current_language}) matches target language({target_language}).")
 
     # Loading Whisper
     device = "cuda" if torch.cuda.is_available() else "cpu" 

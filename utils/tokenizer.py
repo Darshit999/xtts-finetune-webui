@@ -624,7 +624,7 @@ def japanese_cleaners(text, katsu):
 
 
 def korean_transliterate(text):
-   try:
+    try:
         from hangul_romanize import Transliter
         from hangul_romanize.rule import academic
     except ImportError as e:
