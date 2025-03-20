@@ -78,6 +78,7 @@ def format_audio_list(
 
     # Loading Whisper
     device = "cuda" if torch.cuda.is_available() else "cpu" 
+    # device = "cpu"
 
     print("Loading Whisper Model!")
     asr_model = WhisperModel(whisper_model, device=device, compute_type="float16")

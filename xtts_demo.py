@@ -146,7 +146,12 @@ if __name__ == "__main__":
         help="Output path (where data and checkpoints will be saved) Default: output/",
         default=str(Path.cwd() / "finetune_models"),
     )
-
+    parser.add_argument(
+        "--speaker_label",
+        type=str,
+        help="Speaker label (set unique speaker label) Default: coqui",
+        default="coqui",
+    )
     parser.add_argument(
         "--num_epochs",
         type=int,
@@ -179,6 +184,11 @@ if __name__ == "__main__":
             out_path = gr.Textbox(
                 label="Output path (where data and checkpoints will be saved):",
                 value=args.out_path,
+            )
+            
+            speaker_label = gr.Textbox(
+                label="Speaker label (set unique speaker label):",
+                value=args.speaker_label,
             )
             
             upload_file = gr.File(
@@ -228,7 +238,7 @@ if __name__ == "__main__":
 
             prompt_compute_btn = gr.Button(value="Step 1 - Create dataset")
         
-            def preprocess_dataset(audio_path, language, whisper_model, out_path,train_csv,eval_csv, progress=gr.Progress(track_tqdm=True)):
+            def preprocess_dataset(audio_path, language, whisper_model, out_path, speaker_label, train_csv, eval_csv, progress=gr.Progress(track_tqdm=True)):
                 clear_gpu_cache()
 
                 train_csv = ""
@@ -240,7 +250,7 @@ if __name__ == "__main__":
                     return "You should provide one or multiple audio files! If you provided it, probably the upload of the files is not finished yet!", "", ""
                 else:
                     try:
-                        train_meta, eval_meta, audio_total_size = format_audio_list(audio_path, whisper_model = whisper_model, target_language=language, out_path=out_path, gradio_progress=progress)
+                        train_meta, eval_meta, audio_total_size = format_audio_list(audio_path, whisper_model = whisper_model, target_language=language, out_path=out_path,speaker_name=speaker_label, gradio_progress=progress)
                     except:
                         traceback.print_exc()
                         error = traceback.format_exc()
@@ -573,6 +583,7 @@ if __name__ == "__main__":
                     lang,
                     whisper_model,
                     out_path,
+                    speaker_label,
                     train_csv,
                     eval_csv
                 ],
