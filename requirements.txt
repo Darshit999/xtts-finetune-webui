@@ -5,3 +5,4 @@ tts == 0.22.0
 cutlet
 fugashi[unidic-lite]
 fastapi==0.112.2
+indic-num2words

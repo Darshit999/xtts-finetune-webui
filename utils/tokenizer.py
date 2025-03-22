@@ -14,6 +14,7 @@ from spacy.lang.zh import Chinese
 from tokenizers import Tokenizer
 
 from TTS.tts.layers.xtts.zh_num2words import TextNorm as zh_num2words
+from indic_num2words import num2words as hindi_num2words
 from TTS.tts.utils.text.cleaners import collapse_whitespace, lowercase
 
 def get_spacy_lang(lang):
@@ -568,6 +569,8 @@ def _expand_number(m, lang="en"):
 def expand_numbers_multilingual(text, lang="en"):
     if lang == "zh":
         text = zh_num2words()(text)
+    elif lang == "hi":
+        text = re.sub(r'\d+', lambda m: hindi_num2words(int(m.group()), lang='hi'), text)
     else:
         if lang in ["en", "ru"]:
             text = re.sub(_comma_number_re, _remove_commas, text)
