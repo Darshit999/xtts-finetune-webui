@@ -14,7 +14,7 @@ from spacy.lang.zh import Chinese
 from tokenizers import Tokenizer
 
 from TTS.tts.layers.xtts.zh_num2words import TextNorm as zh_num2words
-from indic_num2words import num2words as hindi_num2words
+from indic_numtowords import num2words as hindi_num2words
 from TTS.tts.utils.text.cleaners import collapse_whitespace, lowercase
 
 def get_spacy_lang(lang):
