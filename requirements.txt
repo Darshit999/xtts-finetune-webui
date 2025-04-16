@@ -1,8 +1,8 @@
 faster_whisper==0.10.0
-gradio==4.29.0
+gradio==5.25.2
 tts == 0.22.0
 
 cutlet
 fugashi[unidic-lite]
-fastapi==0.112.2
+fastapi==0.115.12
 indic-numtowords
