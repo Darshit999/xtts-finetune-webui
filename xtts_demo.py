@@ -173,8 +173,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--max_audio_length",
         type=int,
-        help="Max permitted audio size in seconds. Default: 12",
-        default=12,
+        help="Max permitted audio size in seconds. Default: 11",
+        default=11,
     )
     parser.add_argument(
         "--learning_rate",
@@ -280,9 +280,7 @@ if __name__ == "__main__":
                             target_language=language, 
                             out_path=out_path, 
                             speaker_name=speaker_label, 
-                            gradio_progress=progress,
-                            min_duration=4.0,
-                            max_duration=12.0
+                            gradio_progress=progress
                         )
                     except:
                         traceback.print_exc()
