@@ -54,7 +54,9 @@ def format_audio_list(
     eval_percentage=0.15, 
     speaker_name="coqui", 
     gradio_progress=None,
-    compute_type="float32"
+    compute_type="float32",
+    min_duration=4.0,  # New parameter for minimum duration in seconds
+    max_duration=12.0  # New parameter for maximum duration in seconds
     ):
     audio_total_size = 0
     # make sure that ooutput file exists
@@ -148,19 +150,64 @@ def format_audio_list(
                 # Average the current word end and next word start
                 word_end = min((word.end + next_word_start) / 2, word.end + buffer)
                 
+                # Calculate audio duration before saving
+                audio_duration = word_end - sentence_start
+                
+                # For segments that are too short, try to extend them
+                if audio_duration < min_duration:
+                    original_duration = audio_duration
+                    # Try to extend the audio segment to reach min_duration
+                    # First try to extend to the beginning
+                    extra_time_needed = min_duration - audio_duration
+                    new_start = max(0, sentence_start - extra_time_needed/2)  # Split the extension between start and end
+                    # If we still need more time, try extending the end
+                    if (word_end - new_start) < min_duration:
+                        if word_idx + 1 < len(words_list):
+                            # If we have a next word, extend up to it
+                            word_end = min(word_end + (min_duration - (word_end - new_start)), next_word_start)
+                        else:
+                            # If this is the last word, extend as much as possible within the audio length
+                            word_end = min(word_end + (min_duration - (word_end - new_start)), (wav.shape[0] - 1) / sr)
+                    
+                    sentence_start = new_start
+                    # Recalculate duration
+                    audio_duration = word_end - sentence_start
+                    
+                    # If we still couldn't reach the minimum duration (e.g., at the end of a file),
+                    # we'll use the segment anyway but log a warning
+                    if audio_duration < min_duration:
+                        print(f"Warning: Could only extend segment to {audio_duration:.2f}s (target: {min_duration}s)")
+                    else:
+                        print(f"Extended short segment from {original_duration:.2f}s to {audio_duration:.2f}s (target: {min_duration}s)")
+                
+                # Limit segments that are too long
+                if audio_duration > max_duration:
+                    original_duration = audio_duration
+                    # Adjust word_end to enforce maximum duration
+                    word_end = sentence_start + max_duration
+                    audio_duration = word_end - sentence_start
+                    print(f"Shortened long segment from {original_duration:.2f}s to {audio_duration:.2f}s (target: {max_duration}s)")
+                
+                # Skip segments that somehow ended up with zero or negative duration
+                if audio_duration <= 0:
+                    print(f"Warning: Skipping segment with non-positive duration {audio_duration:.2f}s")
+                    continue
+                
                 absoulte_path = os.path.join(out_path, audio_file)
                 os.makedirs(os.path.dirname(absoulte_path), exist_ok=True)
                 i += 1
                 first_word = True
 
                 audio = wav[int(sr*sentence_start):int(sr*word_end)].unsqueeze(0)
-                # Calculate audio duration in seconds
-                audio_duration = audio.size(-1) / sr
+                # Calculate actual audio duration for logging purposes
+                actual_duration = audio.size(-1) / sr
                 
                 torchaudio.save(absoulte_path,
                     audio,
                     sr
                 )
+                
+                print(f"Created segment: {actual_duration:.2f}s")
                 
                 metadata["audio_file"].append(audio_file)
                 metadata["text"].append(sentence)
