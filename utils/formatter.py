@@ -40,10 +40,22 @@ def list_files(basePath, validExts=None, contains=None):
             ext = filename[filename.rfind("."):].lower()
 
             # check to see if the file is an audio and should be processed
-            if validExts is None or ext.endswith(validExts):
-                # construct the path to the audio and yield it
+            if validExts is None:
+                # If no valid extensions are specified, yield all files
                 audioPath = os.path.join(rootDir, filename)
                 yield audioPath
+            else:
+                # Check if the extension matches any of the valid extensions
+                is_valid = False
+                for valid_ext in validExts:
+                    if ext == valid_ext or ext.endswith(valid_ext):
+                        is_valid = True
+                        break
+                
+                if is_valid:
+                    # construct the path to the audio and yield it
+                    audioPath = os.path.join(rootDir, filename)
+                    yield audioPath
 
 def format_audio_list(
     audio_files, 
@@ -93,125 +105,169 @@ def format_audio_list(
         tqdm_object = tqdm(audio_files)
 
     for audio_path in tqdm_object:
-        wav, sr = torchaudio.load(audio_path)
-        # stereo to mono if needed
-        if wav.size(0) != 1:
-            wav = torch.mean(wav, dim=0, keepdim=True)
+        try:
+            # Check if file exists
+            if not os.path.exists(audio_path):
+                print(f"Warning: File {audio_path} does not exist, skipping")
+                continue
+                
+            # Check if file is empty or too small
+            if os.path.getsize(audio_path) < 1000:  # Less than 1KB
+                print(f"Warning: File {audio_path} is too small, skipping")
+                continue
+                
+            wav, sr = torchaudio.load(audio_path)
+            # stereo to mono if needed
+            if wav.size(0) != 1:
+                wav = torch.mean(wav, dim=0, keepdim=True)
 
-        wav = wav.squeeze()
-        audio_total_size += (wav.size(-1) / sr)
-
-        segments, _ = asr_model.transcribe(audio_path, word_timestamps=True, language=target_language)
-        segments = list(segments)
-        # print(segments)
-        i = 0
-        sentence = ""
-        sentence_start = None
-        first_word = True
-        # added all segments words in a unique list
-        words_list = []
-        for _, segment in enumerate(segments):
-            words = list(segment.words)
-            words_list.extend(words)
-
-        # process each word
-        for word_idx, word in enumerate(words_list):
-            if first_word:
-                sentence_start = word.start
-                # If it is the first sentence, add buffer or get the begining of the file
-                if word_idx == 0:
-                    sentence_start = max(sentence_start - buffer, 0)  # Add buffer to the sentence start
-                else:
-                    # get previous sentence end
-                    previous_word_end = words_list[word_idx - 1].end
-                    # add buffer or get the silence midle between the previous sentence and the current one
-                    sentence_start = max(sentence_start - buffer, (previous_word_end + sentence_start)/2)
-
-                sentence = word.word
-                first_word = False
-            else:
-                sentence += word.word
+            wav = wav.squeeze()
             
-            if word.word[-1] in ["!","。", ".", "?", "।"]:
-                sentence = sentence[1:]
-                # Expand number and abbreviations plus normalization
-                sentence = multilingual_cleaners(sentence, target_language)
-                audio_file_name, _ = os.path.splitext(os.path.basename(audio_path))
-
-                audio_file = f"wavs/{audio_file_name}_{str(i).zfill(8)}.wav"
-
-                # Check for the next word's existence
-                if word_idx + 1 < len(words_list):
-                    next_word_start = words_list[word_idx + 1].start
-                else:
-                    # If don't have more words it means that it is the last sentence then use the audio len as next word start
-                    next_word_start = (wav.shape[0] - 1) / sr
-
-                # Average the current word end and next word start
-                word_end = min((word.end + next_word_start) / 2, word.end + buffer)
+            # Check if audio is valid
+            if wav.shape[0] == 0 or torch.isnan(wav).any() or torch.isinf(wav).any():
+                print(f"Warning: File {audio_path} contains invalid audio data, skipping")
+                continue
                 
-                # Calculate audio duration before saving
-                audio_duration = word_end - sentence_start
+            audio_total_size += (wav.size(-1) / sr)
+
+            segments, _ = asr_model.transcribe(audio_path, word_timestamps=True, language=target_language)
+            segments = list(segments)
+            # print(segments)
+            
+            # Check if transcription was successful
+            if len(segments) == 0 or not any(segment.words for segment in segments):
+                print(f"Warning: No transcription found for {audio_path}, skipping")
+                continue
                 
-                # For segments that are too short, try to extend them
-                if audio_duration < min_duration:
-                    original_duration = audio_duration
-                    # Try to extend the audio segment to reach min_duration
-                    # First try to extend to the beginning
-                    extra_time_needed = min_duration - audio_duration
-                    new_start = max(0, sentence_start - extra_time_needed/2)  # Split the extension between start and end
-                    # If we still need more time, try extending the end
-                    if (word_end - new_start) < min_duration:
-                        if word_idx + 1 < len(words_list):
-                            # If we have a next word, extend up to it
-                            word_end = min(word_end + (min_duration - (word_end - new_start)), next_word_start)
-                        else:
-                            # If this is the last word, extend as much as possible within the audio length
-                            word_end = min(word_end + (min_duration - (word_end - new_start)), (wav.shape[0] - 1) / sr)
-                    
-                    sentence_start = new_start
-                    # Recalculate duration
-                    audio_duration = word_end - sentence_start
-                    
-                    # If we still couldn't reach the minimum duration (e.g., at the end of a file),
-                    # we'll use the segment anyway but log a warning
-                    if audio_duration < min_duration:
-                        print(f"Warning: Could only extend segment to {audio_duration:.2f}s (target: {min_duration}s)")
+            i = 0
+            sentence = ""
+            sentence_start = None
+            first_word = True
+            # added all segments words in a unique list
+            words_list = []
+            for _, segment in enumerate(segments):
+                words = list(segment.words)
+                words_list.extend(words)
+                
+            # Check if we got any words
+            if len(words_list) == 0:
+                print(f"Warning: No words found in transcription for {audio_path}, skipping")
+                continue
+
+            # process each word
+            for word_idx, word in enumerate(words_list):
+                if first_word:
+                    sentence_start = word.start
+                    # If it is the first sentence, add buffer or get the begining of the file
+                    if word_idx == 0:
+                        sentence_start = max(sentence_start - buffer, 0)  # Add buffer to the sentence start
                     else:
-                        print(f"Extended short segment from {original_duration:.2f}s to {audio_duration:.2f}s (target: {min_duration}s)")
-                
-                # Limit segments that are too long
-                if audio_duration > max_duration:
-                    original_duration = audio_duration
-                    # Adjust word_end to enforce maximum duration
-                    word_end = sentence_start + max_duration
-                    audio_duration = word_end - sentence_start
-                    print(f"Shortened long segment from {original_duration:.2f}s to {audio_duration:.2f}s (target: {max_duration}s)")
-                
-                # Skip segments that somehow ended up with zero or negative duration
-                if audio_duration <= 0:
-                    print(f"Warning: Skipping segment with non-positive duration {audio_duration:.2f}s")
-                    continue
-                
-                absoulte_path = os.path.join(out_path, audio_file)
-                os.makedirs(os.path.dirname(absoulte_path), exist_ok=True)
-                i += 1
-                first_word = True
+                        # get previous sentence end
+                        previous_word_end = words_list[word_idx - 1].end
+                        # add buffer or get the silence midle between the previous sentence and the current one
+                        sentence_start = max(sentence_start - buffer, (previous_word_end + sentence_start)/2)
 
-                audio = wav[int(sr*sentence_start):int(sr*word_end)].unsqueeze(0)
-                # Calculate actual audio duration for logging purposes
-                actual_duration = audio.size(-1) / sr
+                    sentence = word.word
+                    first_word = False
+                else:
+                    sentence += word.word
                 
-                torchaudio.save(absoulte_path,
-                    audio,
-                    sr
-                )
-                
-                print(f"Created segment: {actual_duration:.2f}s")
-                
-                metadata["audio_file"].append(audio_file)
-                metadata["text"].append(sentence)
-                metadata["speaker_name"].append(speaker_name)
+                if word.word[-1] in ["!","。", ".", "?", "।"]:
+                    sentence = sentence[1:]
+                    # Expand number and abbreviations plus normalization
+                    sentence = multilingual_cleaners(sentence, target_language)
+                    audio_file_name, _ = os.path.splitext(os.path.basename(audio_path))
+
+                    audio_file = f"wavs/{audio_file_name}_{str(i).zfill(8)}.wav"
+
+                    # Check for the next word's existence
+                    if word_idx + 1 < len(words_list):
+                        next_word_start = words_list[word_idx + 1].start
+                    else:
+                        # If don't have more words it means that it is the last sentence then use the audio len as next word start
+                        next_word_start = (wav.shape[0] - 1) / sr
+
+                    # Average the current word end and next word start
+                    word_end = min((word.end + next_word_start) / 2, word.end + buffer)
+                    
+                    # Calculate audio duration before saving
+                    audio_duration = word_end - sentence_start
+                    
+                    # For segments that are too short, try to extend them
+                    if audio_duration < min_duration:
+                        original_duration = audio_duration
+                        # Try to extend the audio segment to reach min_duration
+                        # First try to extend to the beginning
+                        extra_time_needed = min_duration - audio_duration
+                        new_start = max(0, sentence_start - extra_time_needed/2)  # Split the extension between start and end
+                        # If we still need more time, try extending the end
+                        if (word_end - new_start) < min_duration:
+                            if word_idx + 1 < len(words_list):
+                                # If we have a next word, extend up to it
+                                word_end = min(word_end + (min_duration - (word_end - new_start)), next_word_start)
+                            else:
+                                # If this is the last word, extend as much as possible within the audio length
+                                word_end = min(word_end + (min_duration - (word_end - new_start)), (wav.shape[0] - 1) / sr)
+                        
+                        sentence_start = new_start
+                        # Recalculate duration
+                        audio_duration = word_end - sentence_start
+                        
+                        # If we still couldn't reach the minimum duration (e.g., at the end of a file),
+                        # we'll use the segment anyway but log a warning
+                        if audio_duration < min_duration:
+                            print(f"Warning: Could only extend segment to {audio_duration:.2f}s (target: {min_duration}s)")
+                        else:
+                            print(f"Extended short segment from {original_duration:.2f}s to {audio_duration:.2f}s (target: {min_duration}s)")
+                    
+                    # Limit segments that are too long
+                    if audio_duration > max_duration:
+                        original_duration = audio_duration
+                        # Adjust word_end to enforce maximum duration
+                        word_end = sentence_start + max_duration
+                        audio_duration = word_end - sentence_start
+                        print(f"Shortened long segment from {original_duration:.2f}s to {audio_duration:.2f}s (target: {max_duration}s)")
+                    
+                    # Skip segments that somehow ended up with zero or negative duration
+                    if audio_duration <= 0:
+                        print(f"Warning: Skipping segment with non-positive duration {audio_duration:.2f}s")
+                        continue
+                    
+                    absoulte_path = os.path.join(out_path, audio_file)
+                    os.makedirs(os.path.dirname(absoulte_path), exist_ok=True)
+                    i += 1
+                    first_word = True
+
+                    try:
+                        # Ensure sentence_start and word_end are within audio bounds
+                        sentence_start = max(0, min(sentence_start, (wav.shape[0] - 1) / sr))
+                        word_end = max(sentence_start + 0.1, min(word_end, (wav.shape[0] - 1) / sr))
+                        
+                        audio = wav[int(sr*sentence_start):int(sr*word_end)].unsqueeze(0)
+                        # Calculate actual audio duration for logging purposes
+                        actual_duration = audio.size(-1) / sr
+                        
+                        # Final safety check
+                        if actual_duration <= 0:
+                            print(f"Warning: Generated audio has zero length, skipping")
+                            continue
+                        
+                        torchaudio.save(absoulte_path,
+                            audio,
+                            sr
+                        )
+                        
+                        print(f"Created segment: {actual_duration:.2f}s")
+                        
+                        metadata["audio_file"].append(audio_file)
+                        metadata["text"].append(sentence)
+                        metadata["speaker_name"].append(speaker_name)
+                    except Exception as e:
+                        print(f"Error processing segment: {e}")
+                        continue
+        except Exception as e:
+            print(f"Error processing file {audio_path}: {e}")
+            continue
 
     df = pandas.DataFrame(metadata)
     df = df.sample(frac=1)
