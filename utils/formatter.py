@@ -157,6 +157,91 @@ def format_audio_list(
                 # Calculate audio duration in seconds
                 audio_duration = audio.size(-1) / sr
                 
+                # Split long sentences at commas if duration exceeds MAX_SEGMENT_DURATION
+                MAX_SEGMENT_DURATION = 12  # Maximum duration in seconds for a single audio segment
+                MIN_SEGMENT_DURATION = 6   # Minimum preferred duration for split segments
+                
+                if audio_duration > MAX_SEGMENT_DURATION and "," in sentence:
+                    # Find all comma positions
+                    comma_positions = [pos for pos, char in enumerate(sentence) if char == ',']
+                    
+                    if comma_positions:
+                        # Calculate time per character to estimate split points
+                        time_per_char = audio_duration / len(sentence)
+                        
+                        # Track the start of the current segment in both text and audio
+                        segment_start_idx = 0
+                        segment_audio_start = 0
+                        
+                        for comma_idx in comma_positions:
+                            # Estimate audio position based on character position
+                            estimated_time_at_comma = time_per_char * comma_idx
+                            
+                            # Only split if we've accumulated at least MIN_SEGMENT_DURATION seconds
+                            # or if remaining segment would be too long
+                            segment_duration = estimated_time_at_comma - segment_audio_start
+                            remaining_duration = audio_duration - estimated_time_at_comma
+                            
+                            if (segment_duration >= MIN_SEGMENT_DURATION or 
+                                remaining_duration > MAX_SEGMENT_DURATION):
+                                
+                                # Extract the text segment
+                                segment_text = sentence[segment_start_idx:comma_idx + 1].strip()
+                                
+                                if segment_text:  # Ensure we have text to save
+                                    # Calculate audio sample indices
+                                    audio_start_sample = int(segment_audio_start * sr)
+                                    audio_end_sample = int(estimated_time_at_comma * sr)
+                                    
+                                    # Extract and save the audio segment
+                                    segment_audio = wav[audio_start_sample:audio_end_sample].unsqueeze(0)
+                                    
+                                    # Create unique filename for this segment
+                                    segment_audio_file = f"wavs/{audio_file_name}_{str(i).zfill(8)}.wav"
+                                    segment_absoulte_path = os.path.join(out_path, segment_audio_file)
+                                    
+                                    torchaudio.save(segment_absoulte_path, segment_audio, sr)
+                                    
+                                    # Add to metadata
+                                    metadata["audio_file"].append(segment_audio_file)
+                                    metadata["text"].append(segment_text)
+                                    metadata["speaker_name"].append(speaker_name)
+                                    
+                                    i += 1
+                                
+                                # Update segment start positions for next segment
+                                segment_start_idx = comma_idx + 1
+                                segment_audio_start = estimated_time_at_comma
+                        
+                        # Handle the last segment if there's text remaining
+                        if segment_start_idx < len(sentence):
+                            segment_text = sentence[segment_start_idx:].strip()
+                            
+                            if segment_text:  # Ensure we have text to save
+                                # Calculate audio indices for final segment
+                                audio_start_sample = int(segment_audio_start * sr)
+                                audio_end_sample = audio.size(-1)
+                                
+                                # Extract and save the last audio segment
+                                segment_audio = wav[audio_start_sample:audio_end_sample].unsqueeze(0)
+                                
+                                # Create unique filename for this segment
+                                segment_audio_file = f"wavs/{audio_file_name}_{str(i).zfill(8)}.wav"
+                                segment_absoulte_path = os.path.join(out_path, segment_audio_file)
+                                
+                                torchaudio.save(segment_absoulte_path, segment_audio, sr)
+                                
+                                # Add to metadata
+                                metadata["audio_file"].append(segment_audio_file)
+                                metadata["text"].append(segment_text)
+                                metadata["speaker_name"].append(speaker_name)
+                                
+                                i += 1
+                        
+                        # Skip the default saving since we've already processed this audio
+                        continue
+                
+                # If we didn't split the sentence or there were no commas, save it normally
                 torchaudio.save(absoulte_path,
                     audio,
                     sr
