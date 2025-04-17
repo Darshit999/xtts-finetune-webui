@@ -1,7 +1,6 @@
 import gc
 import os
-import time
-import shutil
+
 import pandas
 import torch
 import torchaudio
@@ -46,16 +45,10 @@ def list_files(basePath, validExts=None, contains=None):
                 audioPath = os.path.join(rootDir, filename)
                 yield audioPath
 
-def create_temporary_file(folder, suffix=".wav"):
-    """Create a temporary file path in the specified folder."""
-    import uuid
-    temp_filename = f"temp_{uuid.uuid4()}{suffix}"
-    return os.path.join(folder, temp_filename)
-
 def format_audio_list(
     audio_files, 
     target_language="en", 
-    whisper_model="large-v3", 
+    whisper_model = "large-v3", 
     out_path=None, 
     buffer=0.2, 
     eval_percentage=0.15, 
@@ -64,12 +57,8 @@ def format_audio_list(
     compute_type="float32"
     ):
     audio_total_size = 0
-    # make sure that output file exists
+    # make sure that ooutput file exists
     os.makedirs(out_path, exist_ok=True)
-    
-    # Create temp folder for processing
-    temp_folder = os.path.join(out_path, "temp")
-    os.makedirs(temp_folder, exist_ok=True)
 
     # Write the target language to lang.txt in the output directory
     lang_file_path = os.path.join(out_path, "lang.txt")
@@ -95,19 +84,6 @@ def format_audio_list(
     asr_model = WhisperModel(whisper_model, device=device, compute_type=compute_type)
 
     metadata = {"audio_file": [], "text": [], "speaker_name": []}
-    
-    # Check for existing metadata
-    existing_metadata = {'train': None, 'eval': None}
-    train_metadata_path = os.path.join(out_path, "metadata_train.csv")
-    eval_metadata_path = os.path.join(out_path, "metadata_eval.csv")
-
-    if os.path.exists(train_metadata_path):
-        existing_metadata['train'] = pandas.read_csv(train_metadata_path, sep="|")
-        print("Existing training metadata found and loaded.")
-
-    if os.path.exists(eval_metadata_path):
-        existing_metadata['eval'] = pandas.read_csv(eval_metadata_path, sep="|")
-        print("Existing evaluation metadata found and loaded.")
 
     if gradio_progress is not None:
         tqdm_object = gradio_progress.tqdm(audio_files, desc="Formatting...")
@@ -115,64 +91,6 @@ def format_audio_list(
         tqdm_object = tqdm(audio_files)
 
     for audio_path in tqdm_object:
-        # Handle string path or file-like object
-        if isinstance(audio_path, str):
-            audio_file_name_without_ext, _ = os.path.splitext(os.path.basename(audio_path))
-            audio_path_name = audio_path
-        elif hasattr(audio_path, 'read'):
-            # If it has a 'read' attribute, treat it as a file-like object
-            audio_file_name_without_ext, _ = os.path.splitext(os.path.basename(audio_path.name))
-            audio_path_name = create_temporary_file(temp_folder)
-            with open(audio_path, 'rb') as original_file:
-                file_content = original_file.read()
-            with open(audio_path_name, 'wb') as temp_file:
-                temp_file.write(file_content)
-        
-        # Create a temporary file path within the temp folder
-        temp_audio_path = create_temporary_file(temp_folder)
-        
-        try:
-            if isinstance(audio_path, str):
-                audio_path_name = audio_path
-            elif hasattr(audio_path, 'name'):
-                audio_path_name = audio_path.name
-            else:
-                raise ValueError(f"Unsupported audio_path type: {type(audio_path)}")
-        except Exception as e:
-            print(f"Error reading original file: {e}")
-            continue
-            
-        print(f"Current working file: {audio_path_name}")
-        
-        try:
-            # Copy the audio content
-            time.sleep(0.5)  # Introduce a small delay
-            shutil.copy2(audio_path_name, temp_audio_path)
-        except Exception as e:
-            print(f"Error copying file: {e}")
-            continue
-            
-        # Check if this file has already been processed
-        prefix_check = f"wavs/{audio_file_name_without_ext}_"
-        
-        # Check both training and evaluation metadata for an entry that starts with the file name
-        skip_processing = False
-        
-        for key in ['train', 'eval']:
-            if existing_metadata[key] is not None:
-                mask = existing_metadata[key]['audio_file'].str.startswith(prefix_check)
-                
-                if mask.any():
-                    print(f"Segments from {audio_file_name_without_ext} have been previously processed; skipping...")
-                    skip_processing = True
-                    break
-                    
-        # If we found that we've already processed this file before, continue to the next iteration
-        if skip_processing:
-            if os.path.exists(temp_audio_path):
-                os.remove(temp_audio_path)
-            continue
-            
         wav, sr = torchaudio.load(audio_path)
         # stereo to mono if needed
         if wav.size(0) != 1:
@@ -181,8 +99,9 @@ def format_audio_list(
         wav = wav.squeeze()
         audio_total_size += (wav.size(-1) / sr)
 
-        segments, _ = asr_model.transcribe(audio_path, vad_filter=True, word_timestamps=True, language=target_language)
+        segments, _ = asr_model.transcribe(audio_path, word_timestamps=True, language=target_language)
         segments = list(segments)
+        # print(segments)
         i = 0
         sentence = ""
         sentence_start = None
@@ -238,53 +157,32 @@ def format_audio_list(
                 # Calculate audio duration in seconds
                 audio_duration = audio.size(-1) / sr
                 
-                # Skip clips that are too short (less than 0.33 seconds)
-                if audio_duration >= 1/3:
-                    torchaudio.save(absoulte_path,
-                        audio,
-                        sr
-                    )
-                    
-                    metadata["audio_file"].append(audio_file)
-                    metadata["text"].append(sentence)
-                    metadata["speaker_name"].append(speaker_name)
+                torchaudio.save(absoulte_path,
+                    audio,
+                    sr
+                )
                 
-        # Clean up temporary file
-        if os.path.exists(temp_audio_path):
-            os.remove(temp_audio_path)
+                metadata["audio_file"].append(audio_file)
+                metadata["text"].append(sentence)
+                metadata["speaker_name"].append(speaker_name)
 
-    # Handle existing metadata if it exists
-    if os.path.exists(train_metadata_path) and os.path.exists(eval_metadata_path):
-        existing_train_df = existing_metadata['train']
-        existing_eval_df = existing_metadata['eval']
-    else:
-        existing_train_df = pandas.DataFrame(columns=["audio_file", "text", "speaker_name"])
-        existing_eval_df = pandas.DataFrame(columns=["audio_file", "text", "speaker_name"])
+    df = pandas.DataFrame(metadata)
+    df = df.sample(frac=1)
+    num_val_samples = int(len(df)*eval_percentage)
 
-    new_data_df = pandas.DataFrame(metadata)
-    
-    # Combine existing and new data
-    combined_train_df = pandas.concat([existing_train_df, new_data_df], ignore_index=True).drop_duplicates().reset_index(drop=True)
-    
-    # Shuffle and split the data
-    combined_train_df_shuffled = combined_train_df.sample(frac=1)
-    num_val_samples = int(len(combined_train_df_shuffled) * eval_percentage)
-    
-    final_eval_set = combined_train_df_shuffled[:num_val_samples]
-    final_training_set = combined_train_df_shuffled[num_val_samples:]
-    
-    # Save the datasets
-    final_training_set.sort_values('audio_file').to_csv(train_metadata_path, sep='|', index=False)
-    final_eval_set.sort_values('audio_file').to_csv(eval_metadata_path, sep='|', index=False)
+    df_eval = df[:num_val_samples]
+    df_train = df[num_val_samples:]
+
+    df_train = df_train.sort_values('audio_file')
+    train_metadata_path = os.path.join(out_path, "metadata_train.csv")
+    df_train.to_csv(train_metadata_path, sep="|", index=False)
+
+    eval_metadata_path = os.path.join(out_path, "metadata_eval.csv")
+    df_eval = df_eval.sort_values('audio_file')
+    df_eval.to_csv(eval_metadata_path, sep="|", index=False)
 
     # deallocate VRAM and RAM
-    del asr_model, final_eval_set, final_training_set, new_data_df, existing_metadata
+    del asr_model, df_train, df_eval, df, metadata
     gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    
-    print(f"Train CSV: {train_metadata_path}")
-    print(f"Eval CSV: {eval_metadata_path}")
-    print(f"Audio Total Size: {audio_total_size}")
     
     return train_metadata_path, eval_metadata_path, audio_total_size
