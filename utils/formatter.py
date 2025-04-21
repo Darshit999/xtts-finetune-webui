@@ -157,14 +157,16 @@ def format_audio_list(
                 # Calculate audio duration in seconds
                 audio_duration = audio.size(-1) / sr
                 
-                torchaudio.save(absoulte_path,
-                    audio,
-                    sr
-                )
-                
-                metadata["audio_file"].append(audio_file)
-                metadata["text"].append(sentence)
-                metadata["speaker_name"].append(speaker_name)
+                # Only include segments between 6 and 12 seconds
+                if 6 <= audio_duration <= 12:
+                    torchaudio.save(absoulte_path,
+                        audio,
+                        sr
+                    )
+                    
+                    metadata["audio_file"].append(audio_file)
+                    metadata["text"].append(sentence)
+                    metadata["speaker_name"].append(speaker_name)
 
     df = pandas.DataFrame(metadata)
     df = df.sample(frac=1)
