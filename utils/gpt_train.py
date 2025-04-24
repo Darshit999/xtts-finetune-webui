@@ -1,3 +1,4 @@
+import logging
 import os
 import gc
 from pathlib import Path
@@ -11,7 +12,7 @@ from TTS.utils.manage import ModelManager
 import shutil
 
 
-def train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995, learning_rate=5e-06, multi_gpu=False):
+def train_gpt(custom_model,version, language, num_epochs, batch_size, grad_acumm, train_csv, eval_csv, output_path, max_audio_length=255995):
     #  Logging parameters
     RUN_NAME = "GPT_XTTS_FT"
     PROJECT_NAME = "XTTS_trainer"
@@ -24,7 +25,7 @@ def train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acum
     OUT_PATH = os.path.join(output_path, "run", "training")
 
     # Training Parameters
-    OPTIMIZER_WD_ONLY_ON_WEIGHTS = not multi_gpu  # for multi-gpu training set to False
+    OPTIMIZER_WD_ONLY_ON_WEIGHTS = True  # for multi-gpu training please make it False
     START_WITH_EVAL = False  # if True it will star with evaluation
     BATCH_SIZE = batch_size  # set here the batch size
     GRAD_ACUMM_STEPS = grad_acumm  # set here the grad accumulation steps
@@ -162,7 +163,7 @@ def train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acum
         optimizer="AdamW",
         optimizer_wd_only_on_weights=OPTIMIZER_WD_ONLY_ON_WEIGHTS,
         optimizer_params={"betas": [0.9, 0.96], "eps": 1e-8, "weight_decay": 1e-2},
-        lr=learning_rate,  # use the learning rate from parameter
+        lr=5e-06,  # learning rate
         lr_scheduler="MultiStepLR",
         # it was adjusted accordly for the new step scheme
         lr_scheduler_params={"milestones": [50000 * 18, 150000 * 18, 300000 * 18], "gamma": 0.5, "last_epoch": -1},
@@ -202,6 +203,16 @@ def train_gpt(custom_model, version, language, num_epochs, batch_size, grad_acum
     speaker_ref = train_samples[longest_text_idx]["audio_file"]
 
     trainer_out_path = trainer.output_path
+    
+    # close file handlers and remove them from the logger
+    for handler in logging.getLogger('trainer').handlers:
+        if isinstance(handler, logging.FileHandler):
+            handler.close()
+            logging.getLogger('trainer').removeHandler(handler)
+    
+    # now you should be able to delete the log file
+    log_file = os.path.join(trainer.output_path, f"trainer_{trainer.args.rank}_log.txt")
+    os.remove(log_file)
 
     # deallocate VRAM and RAM
     del model, trainer, train_samples, eval_samples

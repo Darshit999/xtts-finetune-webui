@@ -3,19 +3,20 @@ import re
 import textwrap
 from functools import cached_property
 
+import pypinyin
 import torch
+from hangul_romanize import Transliter
+from hangul_romanize.rule import academic
 from num2words import num2words
 from spacy.lang.ar import Arabic
 from spacy.lang.en import English
 from spacy.lang.es import Spanish
-from spacy.lang.hi import Hindi
 from spacy.lang.ja import Japanese
 from spacy.lang.zh import Chinese
 from tokenizers import Tokenizer
 
 from TTS.tts.layers.xtts.zh_num2words import TextNorm as zh_num2words
-from indic_numtowords import num2words as hindi_num2words
-from TTS.tts.utils.text.cleaners import collapse_whitespace, lowercase
+
 
 def get_spacy_lang(lang):
     if lang == "zh":
@@ -26,8 +27,6 @@ def get_spacy_lang(lang):
         return Arabic()
     elif lang == "es":
         return Spanish()
-    elif lang == "hi":
-        return Hindi()
     else:
         # For most languages, Enlish does the job
         return English()
@@ -273,7 +272,7 @@ def expand_abbreviations_multilingual(text, lang="en"):
 
 _symbols_multilingual = {
     "en": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " and "),
             ("@", " at "),
@@ -285,7 +284,7 @@ _symbols_multilingual = {
         ]
     ],
     "es": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " y "),
             ("@", " arroba "),
@@ -297,7 +296,7 @@ _symbols_multilingual = {
         ]
     ],
     "fr": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " et "),
             ("@", " arobase "),
@@ -309,7 +308,7 @@ _symbols_multilingual = {
         ]
     ],
     "de": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " und "),
             ("@", " at "),
@@ -321,7 +320,7 @@ _symbols_multilingual = {
         ]
     ],
     "pt": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " e "),
             ("@", " arroba "),
@@ -333,7 +332,7 @@ _symbols_multilingual = {
         ]
     ],
     "it": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " e "),
             ("@", " chiocciola "),
@@ -345,7 +344,7 @@ _symbols_multilingual = {
         ]
     ],
     "pl": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " i "),
             ("@", " małpa "),
@@ -358,7 +357,7 @@ _symbols_multilingual = {
     ],
     "ar": [
         # Arabic
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " و "),
             ("@", " على "),
@@ -371,7 +370,7 @@ _symbols_multilingual = {
     ],
     "zh": [
         # Chinese
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " 和 "),
             ("@", " 在 "),
@@ -384,7 +383,7 @@ _symbols_multilingual = {
     ],
     "cs": [
         # Czech
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " a "),
             ("@", " na "),
@@ -397,7 +396,7 @@ _symbols_multilingual = {
     ],
     "ru": [
         # Russian
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " и "),
             ("@", " собака "),
@@ -410,7 +409,7 @@ _symbols_multilingual = {
     ],
     "nl": [
         # Dutch
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " en "),
             ("@", " bij "),
@@ -422,7 +421,7 @@ _symbols_multilingual = {
         ]
     ],
     "tr": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " ve "),
             ("@", " at "),
@@ -434,7 +433,7 @@ _symbols_multilingual = {
         ]
     ],
     "hu": [
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " és "),
             ("@", " kukac "),
@@ -447,7 +446,7 @@ _symbols_multilingual = {
     ],
     "ko": [
         # Korean
-        (re.compile(rf"{re.escape(x[0])}", re.IGNORECASE), x[1])
+        (re.compile(r"%s" % re.escape(x[0]), re.IGNORECASE), x[1])
         for x in [
             ("&", " 그리고 "),
             ("@", " 에 "),
@@ -514,7 +513,7 @@ _ordinal_re = {
     "hu": re.compile(r"([0-9]+)(\.|adik|edik|odik|edik|ödik|ödike|ik)"),
     "ko": re.compile(r"([0-9]+)(번째|번|차|째)"),
     "ja": re.compile(r"([0-9]+)(番|回|つ|目|等|位)"),
-    "hi": re.compile(r"([0-9]+)(वां|वा|वीं|वी|थ)"),  # Hindi ordinals
+    "hi": re.compile(r"([0-9]+)(वां|वा|वीं|वी|थ)"),
 }
 _number_re = re.compile(r"[0-9]+")
 _currency_re = {
@@ -546,33 +545,6 @@ def _remove_dots(m):
 def _expand_decimal_point(m, lang="en"):
     amount = m.group(1).replace(",", ".")
     return num2words(float(amount), lang=lang if lang != "cs" else "cz")
-
-
-def _expand_decimal_point_hindi(m):
-    """Special function to handle Hindi decimal points in a more natural way"""
-    amount = m.group(1).replace(",", ".")
-    whole, decimal = amount.split(".")
-    whole_in_hindi = hindi_num2words(int(whole), lang='hi')
-    
-    # Handle single-digit decimal part with special words
-    if len(decimal) == 1:
-        decimal_digit = int(decimal)
-        if decimal_digit == 5:
-            return f"साढ़े {whole_in_hindi}"
-        elif decimal_digit == 0:
-            return whole_in_hindi
-        elif decimal_digit == 1:
-            return f"सवा {whole_in_hindi}"
-        elif decimal_digit == 2:
-            return f"डेढ़ {whole_in_hindi}" if whole == "1" else f"सवा {whole_in_hindi}"
-        elif decimal_digit == 3:
-            return f"पौने {hindi_num2words(int(whole) + 1, lang='hi')}"
-        else:
-            # For other cases, use point
-            return f"{whole_in_hindi} दशमलव {hindi_num2words(int(decimal), lang='hi')}"
-    else:
-        # For longer decimal parts, use standard format
-        return f"{whole_in_hindi} दशमलव {' '.join(hindi_num2words(int(digit), lang='hi') for digit in decimal)}"
 
 
 def _expand_currency(m, lang="en", currency="USD"):
@@ -616,18 +588,6 @@ def _expand_number(m, lang="en"):
 def expand_numbers_multilingual(text, lang="en"):
     if lang == "zh":
         text = zh_num2words()(text)
-    elif lang == "hi":
-        # Handle Indian Rupee before general number conversion
-        try:
-            text = re.sub(_currency_re["INR"], lambda m: _expand_currency(m, lang, "INR"), text)
-        except:
-            pass
-        # Handle decimal points specially for Hindi
-        text = re.sub(_decimal_number_re, _expand_decimal_point_hindi, text)
-        # Handle regular numbers
-        text = re.sub(r'\b\d+\b', lambda m: hindi_num2words(int(m.group()), lang='hi'), text)
-        # Handle ordinals
-        text = re.sub(_ordinal_re[lang], lambda m: _expand_ordinal(m, lang), text)
     else:
         if lang in ["en", "ru"]:
             text = re.sub(_comma_number_re, _remove_commas, text)
@@ -644,6 +604,14 @@ def expand_numbers_multilingual(text, lang="en"):
         text = re.sub(_ordinal_re[lang], lambda m: _expand_ordinal(m, lang), text)
         text = re.sub(_number_re, lambda m: _expand_number(m, lang), text)
     return text
+
+
+def lowercase(text):
+    return text.lower()
+
+
+def collapse_whitespace(text):
+    return re.sub(_whitespace_re, " ", text)
 
 
 def multilingual_cleaners(text, lang):
@@ -668,10 +636,6 @@ def basic_cleaners(text):
 
 
 def chinese_transliterate(text):
-    try:
-        import pypinyin
-    except ImportError as e:
-        raise ImportError("Chinese requires: pypinyin") from e
     return "".join(
         [p[0] for p in pypinyin.pinyin(text, style=pypinyin.Style.TONE3, heteronym=False, neutral_tone_with_five=True)]
     )
@@ -684,62 +648,8 @@ def japanese_cleaners(text, katsu):
 
 
 def korean_transliterate(text):
-    try:
-        from hangul_romanize import Transliter
-        from hangul_romanize.rule import academic
-    except ImportError as e:
-        raise ImportError("Korean requires: hangul_romanize") from e
     r = Transliter(academic)
     return r.translit(text)
-
-
-def hindi_transliterate(text):
-    """Transliterate Hindi text from Devanagari to Latin script"""
-    if not check_hindi_dependencies():
-        return text
-        
-    try:
-        from ai4bharat.transliteration import XlitEngine
-        engine = XlitEngine(src_script_type="indic", beam_width=10, rescore=False)
-        out = engine.translit_sentence(text, lang_code="hi")
-        return out
-    except ImportError:
-        try:
-            from indic_transliteration import sanscript
-            return sanscript.transliterate(text, sanscript.DEVANAGARI, sanscript.ITRANS)
-        except ImportError:
-            print("Hindi transliteration failed: No suitable library found.")
-            return text
-    except Exception as e:
-        print(f"Hindi transliteration failed: {e}")
-        return text
-
-
-def check_hindi_dependencies():
-    """Check if Hindi transliteration dependencies are installed"""
-    ai4bharat_available = False
-    indic_trans_available = False
-    
-    try:
-        import ai4bharat.transliteration
-        ai4bharat_available = True
-    except ImportError:
-        pass
-        
-    try:
-        import indic_transliteration.sanscript
-        indic_trans_available = True
-    except ImportError:
-        pass
-        
-    if not (ai4bharat_available or indic_trans_available):
-        print("""
-Hindi transliteration requires additional dependencies. Please install one of:
-  - pip install ai4bharat-transliteration (recommended)
-  - pip install indic-transliteration
-""")
-        return False
-    return True
 
 
 DEFAULT_VOCAB_FILE = os.path.join(os.path.dirname(os.path.realpath(__file__)), "../data/tokenizer.json")
@@ -785,19 +695,17 @@ class VoiceBpeTokenizer:
             )
 
     def preprocess_text(self, txt, lang):
-        if lang in {"ar", "cs", "de", "en", "es", "fr", "hi", "hu", "it", "nl", "pl", "pt", "ru", "tr", "zh", "ko"}:
+        if lang in {"ar", "cs", "de", "en", "es", "fr", "hu", "it", "nl", "pl", "pt", "ru", "tr", "zh", "ko"}:
             txt = multilingual_cleaners(txt, lang)
             if lang == "zh":
                 txt = chinese_transliterate(txt)
             if lang == "ko":
                 txt = korean_transliterate(txt)
-            if lang == "hi" and not all(ord(c) < 128 for c in txt):  # Check if contains non-ASCII (Devanagari) characters
-                try:
-                    txt = hindi_transliterate(txt)
-                except Exception as e:
-                    print(f"Hindi transliteration failed: {e}")
         elif lang == "ja":
             txt = japanese_cleaners(txt, self.katsu)
+        elif lang == "hi":
+            # @manmay will implement this
+            txt = basic_cleaners(txt)
         else:
             raise NotImplementedError(f"Language '{lang}' is not supported.")
         return txt
@@ -920,15 +828,6 @@ def test_expand_numbers_multilingual():
         ("12.5 초 안에.", "십이 점 다섯 초 안에.", "ko"),
         ("50 명의 병사가 있었다.", "오십 명의 병사가 있었다.", "ko"),
         ("이것은 1 번째 테스트입니다", "이것은 첫 번째 테스트입니다", "ko"),
-        # Hindi
-        ("12.5 सेकंड में।", "साढ़े बारह सेकंड में।", "hi"),
-        ("50 सैनिक थे।", "पचास सैनिक थे।", "hi"),
-        ("1वां स्थान", "पहला स्थान", "hi"),
-        ("₹50 खर्च किए", "पचास रुपये खर्च किए", "hi"),
-        ("1.25 किलो चावल", "सवा एक किलो चावल", "hi"),
-        ("9.5 बजे", "साढ़े नौ बजे", "hi"),
-        ("1.75 लीटर दूध", "पौने दो लीटर दूध", "hi"),
-        ("3.14 का मान", "तीन दशमलव एक चार का मान", "hi"),
     ]
     for a, b, lang in test_cases:
         out = expand_numbers_multilingual(a, lang=lang)
@@ -971,9 +870,6 @@ def test_abbreviations_multilingual():
         ("Dr. Ayşe burada.", "doktor Ayşe burada.", "tr"),
         # Hungarian
         ("Dr. Szabó itt van.", "doktor Szabó itt van.", "hu"),
-        # Hindi
-        ("डॉ. शर्मा आए हैं।", "डॉक्टर शर्मा आए हैं।", "hi"),
-        ("श्री. राम ने कहा", "श्रीमान राम ने कहा", "hi"),
     ]
 
     for a, b, lang in test_cases:
@@ -1001,7 +897,6 @@ def test_symbols_multilingual():
         ("Pilim %14 dolu.", "Pilim yüzde 14 dolu.", "tr"),
         ("Az akkumulátorom töltöttsége 14%", "Az akkumulátorom töltöttsége 14 százalék", "hu"),
         ("배터리 잔량이 14%입니다.", "배터리 잔량이 14 퍼센트입니다.", "ko"),
-        ("मेरे पास 14% बैटरी है।", "मेरे पास चौदह प्रतिशत बैटरी है।", "hi"),
     ]
 
     for a, b, lang in test_cases:

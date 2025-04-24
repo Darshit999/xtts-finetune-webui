@@ -1,8 +1,12 @@
-faster_whisper==0.10.0
+faster_whisper==1.0.3
 gradio==5.25.2
-tts == 0.22.0
-
-cutlet
-fugashi[unidic-lite]
+spacy==3.7.5
+coqui-tts[languages] == 0.25.0
+cutlet==0.5.0
+fugashi[unidic-lite]==1.4.0
 fastapi==0.115.12
-indic-numtowords
+pydantic==2.3.0
+
+
+
+

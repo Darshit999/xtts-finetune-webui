@@ -51,6 +51,22 @@ If you are looking for an option for normal XTTS use look here [https://github.c
 
 ![image](https://github.com/daswer123/xtts-finetune-webui/assets/22278673/aa05bcd4-8642-4de4-8f2f-bc0f5571af63)
 
+## Run Remotly
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-Spaces-yellow?style=flat&logo=huggingface)](https://huggingface.co/spaces/drewThomasson/xtts-finetune-webui-gpu) [![Kaggle](https://img.shields.io/badge/Kaggle-035a7d?style=flat&logo=kaggle&logoColor=white)](notebook/kaggle-xtts-finetune-webui-gradio-gui.ipynb) [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DrewThomasson/ebook2audiobook/blob/v25/Notebooks/finetune/xtts/colab_xtts_finetune_webui.ipynb)
+
+
+## 🐳 Run in Docker 
+```docker
+docker run -it --gpus all --pull always -p 7860:7860 --platform=linux/amd64 athomasson2/fine_tune_xtts:huggingface python app.py
+```
+## Run Headless
+
+```bash
+python headlessXttsTrain.py --input_audio speaker.wav --lang en --epochs 10 # Example with parameters
+
+python headlessXttsTrain.py --help # See parameters
+```
+
 ## Install
 
 1. Make sure you have `Cuda` installed
@@ -64,3 +80,21 @@ If you are looking for an option for normal XTTS use look here [https://github.c
 1. First start `install.bat`
 2. To start the server start `start.bat`
 3. Go to the local address `127.0.0.1:5003`
+
+### On Linux
+
+1. Run `bash install.sh`
+2. To start the server start `start.sh`
+3. Go to the local address `127.0.0.1:5003`
+
+### On Apple Silicon Mac (python 3.10 env)
+1. ``` pip install --no-deps -r apple_silicon_requirements.txt ```
+2. To start the server `python xtts_demo.py`
+3. Go to the local address `127.0.0.1:5003`
+
+### On Manjaro x86 (python 3.11.11 env)
+1. ``` pip install --no-deps -r ManjaroX86Python3.11.11_requirements.txt ```
+2. To start the server `python xtts_demo.py`
+3. Go to the local address `127.0.0.1:5003`
+
+~                                            
